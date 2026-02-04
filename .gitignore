@@ -1,0 +1,37 @@
+# python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+
+# venv
+.venv/
+
+# run outputs
+runs/
+reports/
+
+# OS
+.DS_Store
+# python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+
+# venv
+.venv/
+
+# run outputs
+runs/
+reports/
+
+# OS
+.DS_Store
+
