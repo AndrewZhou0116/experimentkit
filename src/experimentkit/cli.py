@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import platform
 import sys
 import time
@@ -10,6 +9,13 @@ import uuid
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+
+from experimentkit.core.config import (
+    apply_overrides,
+    config_hash,
+    dump_yaml,
+    load_config,
+)
 
 
 @dataclass(frozen=True)
@@ -20,6 +26,11 @@ class RunMeta:
     cwd: str
     python_version: str
     platform: str
+
+    config_path: str | None
+    config_hash: str
+    seed: int | None
+    overrides: list[str]
 
 
 def _utc_now_iso() -> str:
@@ -40,10 +51,30 @@ def _write_json(path: Path, obj: object) -> None:
 def cmd_run(args: argparse.Namespace) -> int:
     start = time.time()
 
+    # 1) load config (optional)
+    if args.config is None:
+        cfg: dict = {}
+        config_path = None
+    else:
+        cfg = load_config(args.config)
+        config_path = str(Path(args.config))
+
+    # 2) apply seed & overrides -> final config snapshot
+    if args.seed is not None:
+        cfg["seed"] = int(args.seed)
+
+    overrides: list[str] = list(args.set or [])
+    final_cfg = apply_overrides(cfg, overrides)
+
+    # 3) create run folder
     runs_dir = Path.cwd() / "runs"
     run_id = _make_run_id()
     run_dir = runs_dir / run_id
     run_dir.mkdir(parents=True, exist_ok=False)
+
+    # 4) write final config + hash
+    dump_yaml(run_dir / "config_final.yaml", final_cfg)
+    chash = config_hash(final_cfg)
 
     command = " ".join([Path(sys.argv[0]).name, *sys.argv[1:]])
 
@@ -54,14 +85,17 @@ def cmd_run(args: argparse.Namespace) -> int:
         cwd=str(Path.cwd()),
         python_version=sys.version.replace("\n", " "),
         platform=f"{platform.system()} {platform.release()} ({platform.machine()})",
+        config_path=config_path,
+        config_hash=chash,
+        seed=args.seed,
+        overrides=overrides,
     )
-
     _write_json(run_dir / "meta.json", asdict(meta))
 
-    # Day 1: 只证明“能跑 + 能落盘”。后续 Day 2+ 再加 config/metrics/plots/logs
     elapsed = time.time() - start
     print(f"[OK] run created: {run_id}")
     print(f"     path: {run_dir}")
+    print(f"     config_hash: {chash[:12]}...")
     print(f"     elapsed: {elapsed:.3f}s")
     return 0
 
@@ -70,9 +104,15 @@ def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="exp", description="ExperimentKit CLI (MVP)")
     sub = p.add_subparsers(dest="cmd", required=True)
 
-    p_run = sub.add_parser("run", help="run one experiment (Day1: creates a run folder)")
-    p_run.add_argument("-c", "--config", default=None, help="config path (reserved for Day2)")
-    p_run.add_argument("--seed", type=int, default=None, help="seed (reserved for Day2)")
+    p_run = sub.add_parser("run", help="run one experiment (Day2: config snapshot + overrides)")
+    p_run.add_argument("-c", "--config", default=None, help="config path (.yaml/.json)")
+    p_run.add_argument("--seed", type=int, default=None, help="seed (also written into config)")
+    p_run.add_argument(
+        "--set",
+        action="append",
+        default=[],
+        help="override config, repeatable. e.g. --set trainer.lr=1e-3",
+    )
     p_run.set_defaults(func=cmd_run)
 
     return p

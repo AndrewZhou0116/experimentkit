@@ -1,0 +1,20 @@
+experiment:
+  name: iris_logreg
+
+data:
+  name: iris
+
+model:
+  type: logistic_regression
+  params:
+    C: 1.0
+    max_iter: 200
+
+trainer:
+  test_size: 0.2
+
+metrics:
+  - accuracy
+
+seed: 0
+
