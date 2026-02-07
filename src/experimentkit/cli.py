@@ -1,5 +1,5 @@
 from __future__ import annotations
-
+from experimentkit.core.reporting import generate_report
 import argparse
 import json
 import logging
@@ -157,13 +157,39 @@ def cmd_run(args: argparse.Namespace) -> int:
     print(f"     config_hash: {chash[:12]}...")
     print(f"     duration_sec: {duration:.3f}s")
     return 0
+def cmd_report(args: argparse.Namespace) -> int:
+    # choose run_id
+    runs_dir = Path.cwd() / "runs"
+    if args.latest:
+        if not runs_dir.exists():
+            raise FileNotFoundError("runs/ not found")
+        items = sorted([p for p in runs_dir.iterdir() if p.is_dir()], key=lambda p: p.name, reverse=True)
+        if not items:
+            raise FileNotFoundError("no runs found")
+        run_dir = items[0]
+    else:
+        if args.run_id is None:
+            raise ValueError("run_id is required unless --latest is used")
+        run_dir = runs_dir / args.run_id
+
+    out_dir = Path.cwd() / "reports" / run_dir.name
+    report_path = generate_report(run_dir=run_dir, out_dir=out_dir)
+
+    print(f"[OK] report generated: {report_path}")
+    return 0
 
 
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="exp", description="ExperimentKit CLI (MVP)")
     sub = p.add_subparsers(dest="cmd", required=True)
 
+
     p_run = sub.add_parser("run", help="run one experiment (tracking + config snapshot)")
+    p_rep = sub.add_parser("report", help="generate report for a run_id")
+    p_rep.add_argument("run_id", nargs="?", default=None, help="run id under runs/")
+    p_rep.add_argument("--latest", action="store_true", help="use latest run")
+    p_rep.set_defaults(func=cmd_report)
+
     p_run.add_argument("-c", "--config", default=None, help="config path (.yaml/.json)")
     p_run.add_argument("--seed", type=int, default=None, help="seed (also written into config)")
     p_run.add_argument(
