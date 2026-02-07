@@ -19,7 +19,7 @@ from experimentkit.core.tracking import (
     sha256_text,
     write_text,
 )
-
+from experimentkit.core.runner import run_experiment
 
 @dataclass(frozen=True)
 class RunMeta:
@@ -118,7 +118,16 @@ def cmd_run(args: argparse.Namespace) -> int:
     git_commit = get_git_commit(cwd)
     git_dirty = is_git_dirty(cwd)
     logger.info("git_commit=%s git_dirty=%s", git_commit, git_dirty)
-
+    # 8) run actual experiment (Day4)
+    metrics: dict | None = None
+    try:
+        metrics = run_experiment(final_cfg, run_dir, logger)
+        _write_json(run_dir / "metrics.json", metrics)
+        logger.info("metrics saved: %s", run_dir / "metrics.json")
+    except Exception as e:
+        logger.exception("experiment failed: %s", e)
+        # 失败也要留痕迹，方便 debug
+        (run_dir / "error.txt").write_text(str(e) + "\n", encoding="utf-8")
     # 8) meta
     command = " ".join([Path(sys.argv[0]).name, *sys.argv[1:]])
     duration = time.time() - start
